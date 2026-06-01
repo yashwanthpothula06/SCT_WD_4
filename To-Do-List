@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Modern Task Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Quicksand',sans-serif; transition:all .25s ease; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+:root { --primary:#7c3aed; --bg:#0f0f0f; --card:#171717; --border:#262626; --text:#ffffff; }
+.light { --bg:#f8fafc; --card:#ffffff; --border:#e5e7eb; --text:#111827; }
+body { background:var(--bg); color:var(--text); min-height:100vh; }
+.glass { background:var(--card); border:1px solid var(--border); }
+input, select, textarea, button { font-size: 16px !important; }
+.high { border-left:5px solid #ef4444; }
+.medium { border-left:5px solid #f97316; }
+.low { border-left:5px solid #22c55e; }
+.completed { opacity:.6; }
+.completed h3 { text-decoration:line-through; }
+.modal { backdrop-filter:blur(6px); }
+</style>
+</head>
+<body>
+<div class="max-w-6xl mx-auto p-5">
+  <div class="flex flex-wrap gap-4 justify-between items-center mb-8">
+    <div>
+      <h1 class="text-4xl font-bold">Task Manager</h1>
+      <p class="opacity-70">Stay productive</p>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="toggleTheme()" class="w-12 h-12 rounded-full glass flex items-center justify-center"><i data-lucide="moon"></i></button>
+      <button onclick="openModal()" class="px-6 h-12 rounded-full bg-violet-600 text-white font-bold flex items-center gap-2"><i data-lucide="plus"></i> Add</button>
+    </div>
+  </div>
+
+  <div class="mb-6">
+    <input id="searchInput" type="text" placeholder="Search..." class="w-full glass rounded-3xl p-4 outline-none" onkeyup="renderTasks()">
+  </div>
+
+  <div class="grid md:grid-cols-4 grid-cols-2 gap-4 mb-6">
+    <div class="glass rounded-[28px] p-5"><p class="text-xs opacity-60">TOTAL</p><h2 id="totalTasks" class="text-2xl font-bold">0</h2></div>
+    <div class="glass rounded-[28px] p-5"><p class="text-xs opacity-60">DONE</p><h2 id="completedTasks" class="text-2xl font-bold">0</h2></div>
+    <div class="glass rounded-[28px] p-5"><p class="text-xs opacity-60">PENDING</p><h2 id="pendingTasks" class="text-2xl font-bold">0</h2></div>
+    <div class="glass rounded-[28px] p-5"><p class="text-xs opacity-60">PROGRESS</p><h2 id="progressText" class="text-2xl font-bold">0%</h2></div>
+  </div>
+
+  <div class="flex gap-3 flex-wrap mb-8">
+    <button onclick="setFilter('all')" class="glass px-5 py-2 rounded-full font-bold text-sm">All</button>
+    <button onclick="setFilter('pending')" class="glass px-5 py-2 rounded-full font-bold text-sm">Pending</button>
+    <button onclick="setFilter('completed')" class="glass px-5 py-2 rounded-full font-bold text-sm">Completed</button>
+    <button onclick="showConfirm('clearCompleted')" class="bg-green-600 text-white px-5 py-2 rounded-full font-bold text-sm">Clear Done</button>
+    <button onclick="showConfirm('clearAll')" class="bg-red-600 text-white px-5 py-2 rounded-full font-bold text-sm">Clear All</button>
+  </div>
+
+  <div id="taskContainer" class="grid md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+</div>
+
+<div id="modal" class="hidden fixed inset-0 bg-black/60 modal flex items-center justify-center p-4 z-50">
+  <div class="glass rounded-[32px] p-6 w-full max-w-md">
+    <h2 id="modalTitle" class="text-2xl font-bold mb-5">Add Task</h2>
+    <input id="title" type="text" placeholder="Title" class="w-full glass rounded-2xl p-4 mb-3 outline-none">
+    <textarea id="description" placeholder="Description" class="w-full glass rounded-2xl p-4 mb-3 outline-none h-24"></textarea>
+    <input id="date" type="date" class="w-full glass rounded-2xl p-4 mb-3 outline-none">
+    <select id="priority" class="w-full glass rounded-2xl p-4 mb-5 outline-none">
+      <option value="high">High Priority</option>
+      <option value="medium">Medium Priority</option>
+      <option value="low">Low Priority</option>
+    </select>
+    <div class="flex gap-3">
+      <button onclick="saveTask()" class="flex-1 bg-violet-600 text-white py-3 rounded-full font-bold">Save</button>
+      <button onclick="closeModal()" class="flex-1 bg-gray-500 text-white py-3 rounded-full font-bold">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmModal" class="hidden fixed inset-0 bg-black/60 modal flex items-center justify-center p-4 z-[60]">
+  <div class="glass rounded-[32px] p-6 w-full max-w-xs text-center">
+    <h2 class="text-xl font-bold mb-4">Confirm Action</h2>
+    <p class="mb-6 opacity-70">Are you sure?</p>
+    <div class="flex gap-3">
+      <button id="confirmBtn" class="flex-1 bg-red-600 text-white py-3 rounded-full font-bold">Yes</button>
+      <button onclick="hideConfirm()" class="flex-1 bg-gray-500 text-white py-3 rounded-full font-bold">No</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+let filter = "all", editingId = null, actionType = "";
+
+function saveStorage(){ localStorage.setItem("tasks", JSON.stringify(tasks)); }
+function openModal(){ document.getElementById("modal").classList.remove("hidden"); }
+function closeModal(){ 
+    document.getElementById("modal").classList.add("hidden"); 
+    document.getElementById("title").value=""; document.getElementById("description").value=""; 
+    document.getElementById("date").value=""; document.getElementById("priority").value="high"; 
+    editingId = null;
+}
+function showConfirm(type){ actionType = type; document.getElementById("confirmModal").classList.remove("hidden"); }
+function hideConfirm(){ document.getElementById("confirmModal").classList.add("hidden"); }
+document.getElementById("confirmBtn").onclick = () => {
+    if(actionType === 'clearCompleted') tasks = tasks.filter(t => !t.completed);
+    if(actionType === 'clearAll') tasks = [];
+    saveStorage(); renderTasks(); updateStats(); hideConfirm();
+};
+
+function saveTask(){
+    const t = document.getElementById("title").value.trim(), d = document.getElementById("description").value.trim(), dt = document.getElementById("date").value, p = document.getElementById("priority").value;
+    if(!t) return;
+    if(editingId) tasks = tasks.map(tk => tk.id === editingId ? {...tk, title:t, description:d, date:dt, priority:p} : tk);
+    else tasks.push({id:Date.now(), title:t, description:d, date:dt, priority:p, completed:false});
+    saveStorage(); renderTasks(); updateStats(); closeModal();
+}
+
+function renderTasks(){
+    const container = document.getElementById("taskContainer");
+    let filtered = tasks.filter(t => filter === "all" ? true : (filter === "pending" ? !t.completed : t.completed));
+    container.innerHTML = filtered.map(t => `
+        <div class="glass rounded-[30px] p-5 ${t.priority} ${t.completed ? 'completed' : ''}">
+            <div class="flex justify-between mb-3"><span class="font-bold uppercase text-xs">${t.priority}</span>
+                <div class="flex gap-2">
+                    <button onclick="toggleTask(${t.id})"><i data-lucide="${t.completed ? 'check-circle' : 'circle'}"></i></button>
+                    <button onclick="editTask(${t.id})"><i data-lucide="pencil"></i></button>
+                    <button onclick="deleteTask(${t.id})"><i data-lucide="trash-2"></i></button>
+                </div>
+            </div>
+            <h3 class="font-bold text-lg mb-2">${t.title}</h3>
+            <p class="opacity-70 text-sm mb-4">${t.description || "No description"}</p>
+            <span class="text-xs opacity-60">${t.date || "No date"}</span>
+        </div>`).join("");
+    lucide.createIcons();
+}
+
+function toggleTask(id){ tasks = tasks.map(t => t.id === id ? {...t, completed: !t.completed} : t); saveStorage(); renderTasks(); updateStats(); }
+function deleteTask(id){ tasks = tasks.filter(t => t.id !== id); saveStorage(); renderTasks(); updateStats(); }
+function editTask(id){
+    const t = tasks.find(x => x.id === id); editingId = id;
+    document.getElementById("title").value = t.title; document.getElementById("description").value = t.description;
+    document.getElementById("date").value = t.date; document.getElementById("priority").value = t.priority;
+    openModal();
+}
+function setFilter(f){ filter = f; renderTasks(); }
+function updateStats(){
+    const t = tasks.length, c = tasks.filter(x => x.completed).length;
+    document.getElementById("totalTasks").innerText = t;
+    document.getElementById("completedTasks").innerText = c;
+    document.getElementById("pendingTasks").innerText = t - c;
+    document.getElementById("progressText").innerText = t ? Math.round((c/t)*100) + "%" : "0%";
+}
+function toggleTheme(){ document.body.classList.toggle("light"); localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark"); }
+if(localStorage.getItem("theme") === "light") document.body.classList.add("light");
+renderTasks(); updateStats();
+</script>
+</body>
+</html>
